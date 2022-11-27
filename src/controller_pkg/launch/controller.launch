@@ -1,0 +1,13 @@
+<!--- ToDo: write controller launch script. think about how to import the .yaml file from config -->
+<!--- if you have no ide what to do, start here: http://wiki.ros.org/roslaunch/XML -->
+<!--- also check point 2 here: http://wiki.ros.org/rosparam -->
+
+<launch>
+  <node name="controller_node" pkg="controller_pkg" type="controller_node" clear_params="true"/>
+  <!-- todo: load rosparam from file here -->
+  <rosparam command="load" file="$(find controller_pkg)/config/controller_params.yaml" />
+
+  <!-- RViz -->
+  <arg name="rviz" default="true"/>
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="$(anon rviz)" respawn="true" output="screen" args="-d $(find controller_pkg)/launch/test.rviz" />
+</launch>
