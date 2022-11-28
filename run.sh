@@ -1,2 +1,3 @@
 source devel/setup.bash
-rosrun controller_pkg controller_node
+# roslaunch controller_pkg controller.launch
+# rosrun controller_pkg basic_shapes

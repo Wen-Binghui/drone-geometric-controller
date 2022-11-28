@@ -9,5 +9,5 @@
 
   <!-- RViz -->
   <arg name="rviz" default="true"/>
-  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="$(anon rviz)" respawn="true" output="screen" args="-d $(find controller_pkg)/launch/test.rviz" />
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="$(anon rviz)" respawn="true" output="screen" args="-d $(find controller_pkg)/config/default.rviz" />
 </launch>

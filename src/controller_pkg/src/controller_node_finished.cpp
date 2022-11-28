@@ -135,6 +135,9 @@ public:
                                          &controllerNode::onDesiredState, this);
       current_state_sub = nh.subscribe<nav_msgs::Odometry>("/current_state", queue_size, &controllerNode::onCurrentState, this);
       heartbeat = nh.createTimer(ros::Duration(1 / hz), &controllerNode::controlLoop, this);
+
+
+      
       // ~~~~ end solution
 
       // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -214,9 +217,8 @@ public:
       // ~~~~ begin solution
       tf::Quaternion tf_q;
       tf::quaternionMsgToTF(des_state->transforms[0].rotation, tf_q);
-      double roll, pitch, yaw;
-      tf::Matrix3x3(tf_q).getRPY(roll, pitch, yaw);
-      yawd = yaw;
+      yawd = tf::getYaw(tf_q);
+
       // ~~~~ end solution
       //
       // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -225,43 +227,18 @@ public:
   }
 
   void onCurrentState(const nav_msgs::Odometry::ConstPtr& cur_state){
-      // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-      //  PART 4 | Objective: fill in x, v, R and omega
-      // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~  ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-      //
-      // Get the current position and velocity from the incoming ROS message and
-      // fill in the class member variables x, v, R and omega accordingly.
-      //
-      //  CAVEAT: cur_state.twist.twist.angular is in the world frame, while omega
-      //          needs to be in the body frame!
-      //
-      // ~~~~ begin solution
-      x << cur_state->pose.pose.position.x, cur_state->pose.pose.position.y, cur_state->pose.pose.position.z;
-      v << cur_state->twist.twist.linear.x, cur_state->twist.twist.linear.y, cur_state->twist.twist.linear.z;
+    geometry_msgs::Pose cur_pose = cur_state->pose.pose;
+    geometry_msgs::Twist cur_twist = cur_state->twist.twist;
+    x << cur_pose.position.x, cur_pose.position.y, cur_pose.position.z;
+    v << cur_twist.linear.x, cur_twist.linear.y, cur_twist.linear.z;
+    
+    Eigen::Quaterniond q_cur;
+    tf::quaternionMsgToEigen(cur_pose.orientation, q_cur);
+    R = q_cur.toRotationMatrix();
 
+    Eigen::Vector3d omega_world(cur_twist.angular.x, cur_twist.angular.y, cur_twist.angular.z);
+    omega = R.transpose() * omega_world;
 
-      //First change all the msg to Eigen vectors, then calculate!
-      Eigen::Quaterniond tf_q1;
-      tf::quaternionMsgToEigen(cur_state->pose.pose.orientation, tf_q1);
-      R = tf_q1.toRotationMatrix();
-      //std::cout <<"R:\\n" << R <<"\n";
-
-      Eigen::Vector3d angular;
-      angular << cur_state->twist.twist.angular.x, cur_state->twist.twist.angular.y, cur_state->twist.twist.angular.z;
-      omega = R.transpose() * angular;
-
-
-      //Test route in rviz
-      msgcur.header.frame_id = "world";
-      msgcur.point.x = cur_state->pose.pose.position.x;
-      msgcur.point.y = cur_state->pose.pose.position.y;
-      msgcur.point.z = cur_state->pose.pose.position.z;
-
-      // ~~~~ end solution
-      //
-      // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-      //                                 end part 4
-      // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   }
 
   void controlLoop(const ros::TimerEvent& t){

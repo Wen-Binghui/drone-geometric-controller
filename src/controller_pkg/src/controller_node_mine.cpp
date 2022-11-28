@@ -136,10 +136,9 @@ public:
       x << cur_pose.position.x, cur_pose.position.y, cur_pose.position.z;
       v << cur_twist.linear.x, cur_twist.linear.y, cur_twist.linear.z;
       
-      Eigen::Quaterniond q_cur;
-      tf::quaternionMsgToEigen(cur_pose.orientation, q_cur);
-      R = q_cur.toRotationMatrix();
-
+      Eigen::Quaterniond q_cur(cur_pose.orientation.x, cur_pose.orientation.y,
+                            cur_pose.orientation.z, cur_pose.orientation.w);
+      R = q_cur.normalized().matrix();
       Eigen::Vector3d omega_world(cur_twist.angular.x, cur_twist.angular.y, cur_twist.angular.z);
       omega = R.transpose() * omega_world;
 
@@ -211,5 +210,6 @@ public:
 int main(int argc, char** argv){
   ros::init(argc, argv, "controller_node");
   controllerNode n;
+  ROS_INFO("ASTTTTTTTTTTTTTTTTTT");
   ros::spin();
 }
