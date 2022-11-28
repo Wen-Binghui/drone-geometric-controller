@@ -1,0 +1,2 @@
+source devel/setup.bash
+rosrun controller_pkg controller_node

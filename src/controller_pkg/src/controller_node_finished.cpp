@@ -45,6 +45,7 @@
 
 class controllerNode{
   ros::NodeHandle nh;
+  int queue_size = 10;
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   //  PART 1 |  Declare ROS callback handlers
@@ -60,9 +61,13 @@ class controllerNode{
   ros::Publisher propeller_speeds = nh.advertise<mav_msgs::Actuators>("rotor_speed_cmds", 1);  
   ros::Subscriber desired_state_sub;
   ros::Subscriber current_state_sub;
-  // geometry_msgs::PointStamped msgdes;
 
-  
+
+  //Test
+  ros::Publisher des_line= nh.advertise<geometry_msgs::PointStamped>("/desied_position", 1);
+  ros::Publisher cur_line= nh.advertise<geometry_msgs::PointStamped>("/current_position", 1);
+  geometry_msgs::PointStamped msgdes;
+  geometry_msgs::PointStamped msgcur;
   // ~~~~ end solution
   // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
   //                                 end part 1
@@ -92,11 +97,10 @@ class controllerNode{
   Eigen::Vector3d xd;    // desired position of the UAV's c.o.m. in the world frame
   Eigen::Vector3d vd;    // desired velocity of the UAV's c.o.m. in the world frame
   Eigen::Vector3d ad;    // desired acceleration of the UAV's c.o.m. in the world frame
-
   double yawd;           // desired yaw angle
 
   double hz;             // frequency of the main control loop
-  int queue_size = 10;
+
 
   static Eigen::Vector3d Vee(const Eigen::Matrix3d& in){
     Eigen::Vector3d out;
@@ -110,7 +114,7 @@ class controllerNode{
 
 public:
   controllerNode():e3(0,0,1),F2W(4,4),hz(1000.0){
-    
+
       // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       //  PART 2 |  Initialize ROS callback handlers
       // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~  ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -127,14 +131,10 @@ public:
       //  - read the lab 3 handout to fnd the message type
       //
       // ~~~~ begin solution
-      desired_state_sub = nh.subscribe<trajectory_msgs::MultiDOFJointTrajectoryPoint>("/desired_state", 
-                  queue_size, &controllerNode::onDesiredState, this);
-
-      current_state_sub = nh.subscribe<nav_msgs::Odometry>("/current_state",
-                  queue_size, &controllerNode::onCurrentState, this);
-
+      desired_state_sub = nh.subscribe<trajectory_msgs::MultiDOFJointTrajectoryPoint>("/desired_state", queue_size,
+                                         &controllerNode::onDesiredState, this);
+      current_state_sub = nh.subscribe<nav_msgs::Odometry>("/current_state", queue_size, &controllerNode::onCurrentState, this);
       heartbeat = nh.createTimer(ros::Duration(1 / hz), &controllerNode::controlLoop, this);
-
       // ~~~~ end solution
 
       // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -178,7 +178,7 @@ public:
       J << 1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0;
   }
 
-   void onDesiredState(const trajectory_msgs::MultiDOFJointTrajectoryPoint::ConstPtr& des_state){
+  void onDesiredState(const trajectory_msgs::MultiDOFJointTrajectoryPoint::ConstPtr& des_state){
 
       // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       //  PART 3 | Objective: fill in xd, vd, ad, yawd
@@ -191,10 +191,16 @@ public:
       // Hint: use "v << vx, vy, vz;" to fill in a vector with Eigen.
       //
       // ~~~~ begin solution
-      // ROS_INFO("TX: %3.2f", des_state->transforms[0].translation.x);
       xd << des_state->transforms[0].translation.x, des_state->transforms[0].translation.y, des_state->transforms[0].translation.z;
       vd << des_state->velocities[0].linear.x, des_state->velocities[0].linear.y, des_state->velocities[0].linear.z;
       ad << des_state->accelerations[0].linear.x, des_state->accelerations[0].linear.y, des_state->accelerations[0].linear.z;
+      
+      //Test route in rviz
+      
+      msgdes.header.frame_id = "world";
+      msgdes.point.x = des_state->transforms[0].translation.x;
+      msgdes.point.y = des_state->transforms[0].translation.y;
+      msgdes.point.z = des_state->transforms[0].translation.z;
       
       // ~~~~ end solution
       //
@@ -208,9 +214,9 @@ public:
       // ~~~~ begin solution
       tf::Quaternion tf_q;
       tf::quaternionMsgToTF(des_state->transforms[0].rotation, tf_q);
-      yawd = tf::getYaw(tf_q);
-      // ROS_WARN("YAW: %4.2f",yawd);
-
+      double roll, pitch, yaw;
+      tf::Matrix3x3(tf_q).getRPY(roll, pitch, yaw);
+      yawd = yaw;
       // ~~~~ end solution
       //
       // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -230,16 +236,26 @@ public:
       //          needs to be in the body frame!
       //
       // ~~~~ begin solution
-      geometry_msgs::Pose cur_pose = cur_state->pose.pose;
-      geometry_msgs::Twist cur_twist = cur_state->twist.twist;
-      x << cur_pose.position.x, cur_pose.position.y, cur_pose.position.z;
-      v << cur_twist.linear.x, cur_twist.linear.y, cur_twist.linear.z;
-      
-      Eigen::Quaterniond q_cur(cur_pose.orientation.x, cur_pose.orientation.y,
-                            cur_pose.orientation.z, cur_pose.orientation.w);
-      R = q_cur.normalized().matrix();
-      Eigen::Vector3d omega_world(cur_twist.angular.x, cur_twist.angular.y, cur_twist.angular.z);
-      omega = R.transpose() * omega_world;
+      x << cur_state->pose.pose.position.x, cur_state->pose.pose.position.y, cur_state->pose.pose.position.z;
+      v << cur_state->twist.twist.linear.x, cur_state->twist.twist.linear.y, cur_state->twist.twist.linear.z;
+
+
+      //First change all the msg to Eigen vectors, then calculate!
+      Eigen::Quaterniond tf_q1;
+      tf::quaternionMsgToEigen(cur_state->pose.pose.orientation, tf_q1);
+      R = tf_q1.toRotationMatrix();
+      //std::cout <<"R:\\n" << R <<"\n";
+
+      Eigen::Vector3d angular;
+      angular << cur_state->twist.twist.angular.x, cur_state->twist.twist.angular.y, cur_state->twist.twist.angular.z;
+      omega = R.transpose() * angular;
+
+
+      //Test route in rviz
+      msgcur.header.frame_id = "world";
+      msgcur.point.x = cur_state->pose.pose.position.x;
+      msgcur.point.y = cur_state->pose.pose.position.y;
+      msgcur.point.z = cur_state->pose.pose.position.z;
 
       // ~~~~ end solution
       //
@@ -279,12 +295,26 @@ public:
     //    - remember to normalize your axes!
     //
     // ~~~~ begin solution
-    Eigen::Vector3d b3d = - kx * ex - kv * ev - m * g * e3 + m * ad;
-    b3d.normalize();
-    Eigen::Vector3d b1d(cos(yawd-M_PI/4), sin(yawd-M_PI/4), 0.0);
-    Eigen::Vector3d b2d = b3d.cross(b1d).normalized();
+    Eigen::Vector3d b1d, b2d, b3d, b1c;
     Eigen::Matrix3d Rd;
-    Rd << b2d.cross(b3d), b2d, b3d;
+
+    b3d = - kx * ex - kv * ev + m * g * e3 + m * ad;
+    b3d.normalize();
+    //*******maybe change here***************
+    b1c << cos(yawd-M_PI/4), sin(yawd-M_PI/4), 0.0;
+
+    b2d = b3d.cross(b1c);
+    b2d.normalize();
+    /* Eigen::Matrix3d conterclock45;
+    conterclock45 << cos(PI/4), -sin(PI/4), 0,
+                     sin(PI/4), cos(PI/4), 0,
+                     0, 0, 1;
+    b2d = conterclock45 * b2d; */
+
+    b1d = b2d.cross(b3d);
+    b1d.normalize();
+
+    Rd << b1d, b2d, b3d;
     // ~~~~ end solution
     //
     // 5.3 Compute the orientation error (er) and the rotation-rate error (eomega)
@@ -297,8 +327,7 @@ public:
     //          effects on the closed-loop dynamics.
     //
     // ~~~~ begin solution
-    er = Vee(Rd.transpose() * R - R.transpose() * Rd) / 2;
-    // eomega = omega - R.transpose() * Rd * b1d;
+    er = 0.5 * Vee(Rd.transpose() * R - R.transpose() * Rd);
     eomega = omega;
     // ~~~~ end solution
     //
@@ -318,7 +347,14 @@ public:
     //      effects on the closed-loop dynamics.
     //
     // ~~~~ begin solution
-    
+    Eigen::Vector3d torques;
+    Eigen::Vector3d Re3 = R * e3;
+    double force;
+    //force = (- kx * ex - kv * ev + m * g * e3 + m * ad).transpose() * Re3;
+    force = (-kx * ex - kv * ev + m * g * e3 + m * ad).dot(Re3);
+    //std::cout << "force:\n" << force<<"\n";
+    torques = -kr * er - komega * eomega + omega.cross(J * omega);
+    //std::cout << "torques: \n" << torques[0] <<"  "<< torques[1]<<"  "<<torques[2]<<"\n"<<"\n";
     // ~~~~ end solution
 
     // 5.5 Recover the rotor speeds from the wrench computed above
@@ -345,7 +381,20 @@ public:
     //       direction!
     //
     // ~~~~ begin solution
+    Eigen::Vector4d wrench;
+    wrench << force,torques[0],torques[1],torques[2];
+    //std::cout << wrench <<"\n";
 
+    /* double c_tau_f;
+    c_tau_f = cd / cf; */
+    double d_hat = d / sqrt(2);
+    F2W << cf,cf,cf,cf,
+           cf*d_hat, cf*d_hat, -cf*d_hat, -cf*d_hat, 
+           -cf*d_hat, cf*d_hat, cf*d_hat, -cf*d_hat,
+           cd, -cd, cd, -cd;
+    
+    Eigen::Vector4d rotor_speed;
+    rotor_speed = F2W.inverse() * wrench;
     // ~~~~ end solution
     //
     // 5.6 Populate and publish the control message
@@ -354,7 +403,22 @@ public:
     // to use signed_sqrt function).
     //
     // ~~~~ begin solution
+    mav_msgs::Actuators msg;
 
+    double vel[4];
+    vel[0] = signed_sqrt((rotor_speed[0]));
+    vel[1] = signed_sqrt((rotor_speed[1]));
+    vel[2] = signed_sqrt((rotor_speed[2]));
+    vel[3] = signed_sqrt((rotor_speed[3]));
+    //std::vector<double> v(std::begin(vel), std::end(vel));
+    std::vector<double> v = {vel[0], vel[1], vel[2], vel[3]};
+
+    msg.angular_velocities = v;
+    propeller_speeds.publish(msg);
+
+    //Test for the route of des and cur
+    cur_line.publish(msgcur);
+    des_line.publish(msgdes);
 
     // ~~~~ end solution
     //
@@ -367,6 +431,5 @@ public:
 int main(int argc, char** argv){
   ros::init(argc, argv, "controller_node");
   controllerNode n;
-  ROS_INFO("ASTTTTTTTTTTTTTTTTTT");
   ros::spin();
 }
