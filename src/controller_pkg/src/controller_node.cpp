@@ -18,8 +18,6 @@ class controllerNode{
   ros::Publisher propeller_speeds = nh.advertise<mav_msgs::Actuators>("rotor_speed_cmds", 1);  
   ros::Subscriber desired_state_sub;
   ros::Subscriber current_state_sub;
-  ros::Publisher cur_pose_viz = nh.advertise<visualization_msgs::Marker>("cur_pose", 10);     
-  // Set our initial shape type to be a cube
   
   // Controller parameters
   double kx, kv, kr, komega; // controller gains - [1] eq (15), (16)
@@ -78,13 +76,11 @@ public:
       heartbeat = nh.createTimer(ros::Duration(1 / hz), &controllerNode::controlLoop, this);
 
       //  PART 6 [NOTE: save this for last] |  Tune your gains!
-
       kx = 3.0;
       kv = 2.0;             
       kr = 2.0;
       komega = 0.5;
   
-
       // Initialize constants
       m = 1.0;
       cd = 1e-5;
@@ -115,7 +111,6 @@ public:
       ad << des_state->accelerations[0].linear.x, des_state->accelerations[0].linear.y, des_state->accelerations[0].linear.z;
       
       // 3.2 Extract the yaw component from the quaternion in the incoming ROS
-
       tf::Quaternion tf_q;
       tf::quaternionMsgToTF(des_state->transforms[0].rotation, tf_q);
       yawd = tf::getYaw(tf_q);
@@ -129,8 +124,8 @@ public:
   }
 
   void onCurrentState(const nav_msgs::Odometry::ConstPtr& cur_state){
-      //  PART 4 | Objective: fill in x, v, R and omega
 
+      //  PART 4 | Objective: fill in x, v, R and omega
       geometry_msgs::Pose cur_pose = cur_state->pose.pose;
       geometry_msgs::Twist cur_twist = cur_state->twist.twist;
       x << cur_pose.position.x, cur_pose.position.y, cur_pose.position.z;
@@ -149,14 +144,12 @@ public:
     Eigen::Vector3d ex, ev, er, eomega;
 
     //  PART 5 | Objective: Implement the controller!
-
     ex = x - xd;
     ROS_INFO("ex[0] %3.2f", ex[0]);
     ev = v - vd;
     ROS_INFO("ev[0] %3.2f", ev[0]);
 
     // 5.2 Compute the Rd matrix.
-
     Eigen::Vector3d b3d = - kx * ex - kv * ev + m * g * e3 + m * ad;
     b3d.normalize();
     Eigen::Vector3d b1d(cos(yawd-M_PI/4), sin(yawd-M_PI/4), 0.0);// 坐标系b不同
@@ -165,43 +158,25 @@ public:
     Rd << b2d.cross(b3d), b2d, b3d;
 
     // 5.3 Compute the orientation error (er) and the rotation-rate error (eomega)
-
     er = Vee(Rd.transpose() * R - R.transpose() * Rd) / 2;
-    ROS_INFO("er[0] %3.2f", er[0]);
     // eomega = omega - R.transpose() * Rd * b1d;
     eomega = omega;
-    ROS_INFO("eomega[0] %3.2f", eomega[0]);
 
     // 5.4 Compute the desired wrench (force + torques) to control the UAV.
- 
     double f_force = (- kx * ex - kv * ev + m * g * e3 + m * ad).dot(R * e3);
     Eigen::Vector3d M_torques = -kr * er - komega * eomega + omega.cross(J * omega);
 
-    ROS_INFO("kr %3.2f", kr);
-    ROS_INFO("M_torques[0] %3.2f", M_torques[0]);
-    ROS_INFO("M_torques[1] %3.2f", M_torques[1]);
-
     // 5.5 Recover the rotor speeds from the wrench computed above
- 
     Eigen::Vector4d fM;
     fM << f_force, M_torques;
-    ROS_INFO("fM[1] %3.2f", fM[1]);
-    ROS_INFO("A_inv[1] %3.2f", A_inv.data()[1]);
     Eigen::Vector4d fi = A_inv * fM;
-    ROS_INFO("fi[0] %3.2f", fi[0]);
-
 
     // 5.6 Populate and publish the control message
-
     std::vector<double> vel(4);
     vel[0] = signed_sqrt(fi[0]);
     vel[1] = signed_sqrt(fi[1]);
     vel[2] = signed_sqrt(fi[2]);
     vel[3] = signed_sqrt(fi[3]);
-    ROS_INFO("vel[0] %3.2f", vel[0]);
-    ROS_INFO("vel[1] %3.2f", vel[1]);
-    ROS_INFO("vel[2] %3.2f", vel[2]);
-    ROS_INFO("vel[3] %3.2f", vel[3]);
     mav_msgs::Actuators msg;
     msg.angular_velocities = vel;
     propeller_speeds.publish(msg);
