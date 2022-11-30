@@ -73,7 +73,7 @@ public:
       current_state_sub = nh.subscribe<nav_msgs::Odometry>("/current_state",
                   queue_size, &controllerNode::onCurrentState, this);
 
-      heartbeat = nh.createTimer(ros::Duration(1 / hz), &controllerNode::controlLoop, this);
+      heartbeat = nh.createTimer(ros::Rate(hz), &controllerNode::controlLoop, this);
 
       //  PART 6 [NOTE: save this for last] |  Tune your gains!
       kx = 3.0;
